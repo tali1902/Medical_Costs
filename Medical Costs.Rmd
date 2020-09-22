@@ -1,0 +1,552 @@
+---
+title: "Statistical Analysis of Medical Costs with Machine Learning"
+author: "Tayyab Ali"
+date: "5/6/2020"
+output:
+  word_document: default
+  pdf_document: default
+  html_document: default
+---
+
+### Introduction
+Health insurance companies form a giant industry that affects every person with health insurance. According to S&P Global Market Intelligence, the life insurance sector had net premiums totaling $600.6 billion in 2018. To make their profits, insurance companies charge a higher premium than the amount payed to the insured person. These companies spend much a lot of time and money to predict health care costs. A patient's cost for treatment can depend on many types of factors: location, type fo clinic, diagnosis, type of treatment, bmi, etc. 
+
+The data I am using for my project is about medical costs includes the amount charged. This dataset was obtained from the book "Machine Learning With R" by Brett Lantz and published by Packt Publishing. There are a lot of factors that go into predicting a person's medical charges, and I hope to find which variables are important in this prediction. I am interested in the factors can help explain the medical costs for patients. My outcome variable is going to be "charges" and I will use the six remaining variables as my predictive covariates. The goal of this project is to find the relation between "charges" and multiple predicitive covariates by using machine learning methods that we cover in this class.
+
+For my exploratory analysis, I visualized the different variables through histograms and boxplots. After learning which variables were important in predicting medical charges, I created five linear regression models and analyzed their R-squared values to find the most accurate one. I also used shrinkage methods and analyzed their performance by comparing their Mean Squared Error (MSE). 
+
+Training and testing data were created to use other machine learning models. I used Bagging, Random Forest, Boost, and XGboost models. Importance matrix were generated from these models that emphsized certain variables were more important in predicting charges than others. I also created Predicted Charge vs. Actual charge plots to see how well the models could predict medical charges. The last model I created was Neural Nets and I used its Mean Squared Error value to compare its performance with the other models.
+
+
+Below is a list of the packages I used for this project.
+```{r, echo = TRUE, message = FALSE }
+insurance <- read.csv("insurance.csv")
+attach(insurance)
+library(ISLR)
+library(dplyr)
+library(ggplot2)
+library(glmnet)
+library(dplyr)
+library(tree)
+library(randomForest)
+library(doMC)
+library(gbm)
+library(xgboost)
+```
+
+
+
+### Summary Statistics
+
+Charges- Individual medical costs billed by health insurance
+
+Age- age of primary beneficiary
+
+Sex- insurance contractor gender, female, male
+
+BMI- Body mass index, providing an understanding of body, weights that are relatively high or low relative to height, objective index of body weight (kg / m ^ 2) using the ratio of height to weight, ideally 18.5 to 24.9
+
+Children- Number of children covered by health insurance / Number of dependents
+
+Smoker- Smoking
+
+Region- the beneficiary's residential area in the US, northeast, southeast, southwest, northwest.
+
+
+```{r}
+hist(age, col = 3, breaks = 15 )
+```
+
+The histrogram of age shows the age distribution in my data set. We have a pretty even distribution of age groups, however, there are slightly more people in the 0-20 age range than the 60+ age range.
+```{r}
+sex = as.factor(sex)
+plot(sex, charges, main = "Boxplot of Sex and Charges", xlab = "sex", ylab = "charges")
+```
+
+The boxplot of sex vs charges shows that median amount of charges for males and females is almost identical. Looking at the Quartile 3 values, the boxplot of the sex variables might indicate that males pay slightly more in charges than females.
+```{r}
+hist(bmi,col = 4, breaks = 20)
+```
+
+The histogram of BMI shows that the Body Mass Index ration in normally distributed around a mean of 30. This value is actually above the ideal BMI values which ranges from 18.5 to 24.9. This means that most of our sample is not in the ideal BMI range.
+```{r}
+smoker = as.factor(smoker)
+plot(smoker, charges, main = "Boxplot of Smoker and Charges", xlab = "smoker", ylab = "charges")
+
+```
+
+The “smoker” variable seems to have a strong relationship with charges. Looking at the boxplot for “smoker”, patients who smoked pay significantly more in medical costs.
+```{r}
+region = as.factor(region)
+plot(region, charges, main = "Boxplot of Region and Charges", xlab = "region", ylab = "charges")
+```
+
+The “region” variable does not seem very significant. I do not think this variable can help better explain the outcome variable.
+
+```{r}
+pairs(insurance[,c(1,3,7)], panel = panel.smooth)
+
+```
+
+To find the correlation between y and each x variable, I used the “pairs” command which gives me their plots along with correlations between each x variable. The “pairs” plot between bmi and charges suggest that higher values of bmi would lead to higher charges, which makes sense because high values of bmi are less healthy. Also the age vs charges graph shows the two variables have a postive association. As Age increases, so does medical charges. We expect this to be the case because people tend to develop more health problems as the grow older, causing their medical costs to increase.
+
+
+
+### Linear Regressions
+There are seven total variables in my dataset with "charges" being my dependent variable. One of the predictive covariates is "region" which is a qualitative predictor and takes values of northwest, northeast, southwest, and southeast. I do not think a person's region should have an impact on their medical charges so I will not be including this variable in my regressions. This leaves my with five predictors that I will use to explain charges.
+
+```{r}
+lm.fit1 = lm(charges~smoker, data = insurance)
+summary(lm.fit1)
+```
+The variable I think will explain charges the most is "smoker". This is a dummy variable that takes a value of yes or no if the person smokes. Smoking can lead to many detrimental health issues which would lead to higher medical costs. I expect people who smoke to pay more in charges than people who do not smoke. The first linear regression I ran shows that the x variable is statistically significant using a t test. However the Adjusted R-squared value is only 0.6195 so I will add additional x variables to the model.
+
+```{r}
+lm.fit2 = lm(charges~smoker+bmi, data = insurance)
+summary(lm.fit2)
+```
+"bmi" is a general measure of a person's height to weight ratio. Adding this variable to the model increased the Adjusted R-squared from 0.6195 to 0.6574, which is a significant increase. The "bmi" variable is also statistically significant using a t-test but its coefficient is not very big. I will continue to include "bmi" in my overall model since it has some impact on "charges" and it increased the Adjusted R-squared.
+
+```{r}
+lm.fit3 = lm(charges~smoker+bmi+sex , data = insurance)
+summary(lm.fit3)
+```
+The next variable I included in my model was "sex" which is another dummy variable. The t test statistic for this variable is -0.733 and is not statistically significant even at the 10% level. Including "sex" in my model also lowered the Adjusted R-squared from 0.6574 to 0.6573. I do not think a person's sex should have an effect on how much they pay in medical expenses and the data supports this claim. Moving forward, I will omit the "sex" variable because it does not help explain "charges"
+
+```{r}
+lm.fit4 = lm(charges~smoker+bmi+age , data = insurance)
+summary(lm.fit4)
+```
+I substituted out the "sex" variable for the the "age" variable and this produced much better results. "age" is statistically significant at the 1% level and it also increased the Adjusted R-squared significantly from 0.6574 to 0.7469. It makes sense that "age" affects "charges" because older people generally develop more health problems and need to pay more for medical costs. 
+
+```{r}
+lm.fit5 = lm(charges~smoker+bmi+age+children , data = insurance)
+summary(lm.fit5)
+```
+The last variable I added to my linear regression is "children" which measures the number of dependents a patient has. This variable is statistically significant and it also slightly increases the Adjusted R-squared value to 0.7489. The coefficient of "children" is postive which means that patients with more children have higher medical costs.
+
+#### Analyzing the Best Regression Model
+The fifth linear regression model I created produces the best results. The model includes four predictors that explain "charges" and below is a summary of the model.
+```{r}
+summary(lm.fit5)
+```
+The four x variables have different levels of effect on medical charges and we can interpret each coefficient. The "smoker" variable has, by far, the largest effect on "charges". If a person is a smoker, holding everthing else in the equation constant, their medical costs are $23,811.40 higher than a person who is not a smoker. The interpretation of bmi is that for a one unit increase in body mass index, charges go up by $321.85. The interpretation for age is that for a one year increase in age, medical charges increase by $257.85. And if a person has one more child, their charges increase by $473.50. 
+
+We can also conclude that all the coefficients are different from zero. The null hypothesis in linear regressions is that the coefficients are zero. In our model, the p-values for each coefficient (using t tests) is virtually zero so we can reject the null hypothesis and conclude that the coefficients have high statistical significance. We can also look at the F test for overall significance. The null hypothesis of the F-test is that all the coefficients equal zero and the alternative is that at least one coefficient is non-zero. The p value of the F test is essentially zero therefore we conclude that at least one of the coefficients is different from zero.
+
+```{r}
+ggplot(insurance, aes(x=predict(lm.fit5), y=charges)) + 
+  geom_point(color='blue', size = 1) + 
+  geom_smooth(method='lm', formula= y~x)
+  labs(y="actual value", x="fitted value")
+```
+
+Above is the plot that shows the actual value for "charges" vs. their predicted value. The plot seems normal for values below $20,000 but there are some strange patterns in the plot for charges that are greater than $20,000.
+
+```{r}
+lm.summary = summary(lm.fit5)
+
+coefs = as.data.frame(lm.summary$coefficients[-1,1:2]) # -1 is to exclude the intercept
+names(coefs)[2] = "se" 
+coefs$vars = rownames(coefs)
+ggplot(coefs, aes(vars, Estimate)) + 
+geom_errorbar(aes(ymin=Estimate - 1.96*se, ymax=Estimate + 1.96*se), lwd=1, colour="red", width=0) +
+geom_errorbar(aes(ymin=Estimate - se, ymax=Estimate + se), lwd=1.5, colour="blue", width=0) +
+geom_point(size=2, pch=21, fill="yellow")
+```
+
+The vars vs. estimate plot shows the four coefficients with their 1.96 standard deviation confidence interval. Since the "smoker" coefficient is so much larger than the other coefficients, the scale on the left side of the graph is very large. As discussed earlier in the report, all of the coefficients are statistically significant.
+
+```{r}
+ggplot(insurance) +
+  labs(y="Frequency", x="Residuals") +
+  geom_histogram(aes(x=residuals(lm.fit5)),binwidth = 1000, colour='grey')
+```
+
+The histogram above shows the frequency of the residuals of the linear model. Most of the data is normally distributed around zero.
+
+```{r}
+ggplot(insurance, aes(x=residuals(lm.fit5), y=charges)) + 
+  geom_point(color='blue', size = 1) + 
+  geom_smooth(method='lm', formula= y~x)
+  labs(y="actual value", x="residuals")
+
+```
+
+This last plot shows the residuals vs the actual value. The positive residuals are larger in magnitude than the negative residuals
+
+
+
+### Ridge
+Splitting
+I will use these training and testing sets for future models
+```{r}
+set.seed(45)
+train = insurance %>% sample_frac(0.8)
+test = insurance %>% setdiff(train)
+#both your X_train and X_test should be in matrix format.
+x_train = model.matrix(charges~., train)[,-1] 
+x_test = model.matrix(charges~., test)[,-1]
+y_train = train$charges
+y_test = test$charges
+```
+
+Ridge Regression
+```{r}
+#Fit ridge regression model on training data, alpha = 0 since ridge
+cv.out = cv.glmnet(x_train, log(y_train), alpha = 0)
+# Select lamda that is within 1 standard error of the minimum lambda
+bestlam = cv.out$lambda.min
+bestlam
+```
+The λ that is within 1 standard error of the minimum λ is 0.0606
+```{r}
+plot(cv.out) 
+```
+
+The graph shows the relationship between the cross-validation error and log of λ which is selected, and also shows the minimum λ and λ within 1 standard error of the min.
+```{r}
+out = glmnet(x_train, log(y_train), alpha = 0)
+plot(out, xvar = "lambda") 
+```
+
+This graph shows the coefficients vary as log of lambda changes. All the coefficients shrink to 0 when log lambda is about 6.
+
+```{r}
+#the coefficients correspondent with the chosen lambda
+predict(out, type = "coefficients", s = bestlam)
+
+```
+None of the predicted coefficients are exactly zero. Note that the coefficient of smokeryes is very large indicating that it is important in predicting charges.
+```{r}
+# Using the best lambda to predict test data
+ridge_pred = predict(out, s = bestlam, newx = x_test)
+ridge_mse = mean((exp(ridge_pred) - y_test)^2) 
+ridge_mse 
+
+# Full OLS model
+ols_f = lm(log(charges)~., data = train)
+ols_pred = predict(ols_f, test)
+ols_mse = mean((exp(ols_pred) - y_test)^2) #MSE
+ols_mse 
+
+# Best model from report 2 
+ols_best = lm(log(charges) ~ smoker + bmi + age + children, data = train)
+ols_pred = predict(ols_best, test)
+ols_mse = mean((exp(ols_pred) - y_test)^2) #MSE
+ols_mse
+```
+After finding the MSE for the ridge model, full OLS model, and the best model from report 2, I found that the Ridge regression has the best performance as it has the lowest MSE.
+
+
+
+### Lasso
+```{r}
+#Fit lasso regression model on training data
+cv.out_l = cv.glmnet(x_train, log(y_train), alpha = 1)
+# Select lamda that is within 1 standard error of the minimum lambda
+bestlam_l = cv.out_l$lambda.1se
+bestlam_l
+```
+The λ that is within 1 standard error of the minimum λ is 0.0448
+
+```{r}
+plot(cv.out_l) #plot of training MSE as a function of lambda
+```
+
+The graph shows the relationship between the cross-validation error and log of λ which is selected, and also shows the minimum λ and λ within 1 standard error of the min.
+
+```{r}
+out_l = glmnet(x_train, log(y_train), alpha = 1)
+plot(out_l, xvar = "lambda") #now coefficients vary with lambda
+```
+
+As the log of lambda varies, some of the coefficients are exactly equal to 0, while others are nonzero for large negative values but eventually converge to zero.
+```{r}
+#the coefficients correspondent with the chosen lambda
+predict(out_l, type = "coefficients", s = bestlam_l)
+```
+Now in the Lasso Regression, 4 of the 9 coefficients are exactly zero. We can omit the zero coefficients from our model.
+```{r}
+lasso_pred = predict(out_l, s = bestlam_l, newx = x_test)
+# Calculate the MSE for Lasso
+lasso_mse = mean((exp(lasso_pred) - y_test)^2)
+lasso_mse 
+```
+After finding the MSE for Lasso regression, Ridge Regression, and linear regressions, the model that performed the best is the Ridge regression. It has an MSE that is significantly lower than the linear regression and slightly lower than the Lasso regression.
+
+
+
+### Decision Tree
+```{r, warning = FALSE}
+big_tree = tree(charges~., train)
+plot(big_tree)
+text(big_tree, pretty = 0)
+```
+
+The tree has a depth of 3 and contains 5 leaves.
+```{r, warning = FALSE}
+big_tree_pred = predict(big_tree, test)
+tree_MSE = mean((big_tree_pred - y_test)^2)
+tree_MSE
+```
+Now to prune the tree
+```{r, warning = FALSE}
+cv.charge = cv.tree(big_tree)
+plot(cv.charge$size, cv.charge$dev, type = 'b')
+```
+
+The graph illustrates a 5 terminal node tree that is selectedby cross-validation
+```{r}
+prune_charge = prune.tree(big_tree,best = 5)
+plot(prune_charge)
+text(prune_charge, pretty = 0)
+```
+
+The first split uses the variable smoker. For those who did not smoke, it split by the age with a threshold of 42.5 years. For those who did smoke, it split by a BMI threshold of 30.01. Those who had BMI > 30.01 were split again by age at a threshold of 43.5
+```{r, warning = FALSE}
+tree_pred = predict(prune_charge,test)
+tree_mse = mean((tree_pred-y_test)^2)
+tree_mse
+```
+The tree regression has the best performance out of all the models thus far. It has by far the lowest MSE. The second lowest MSE is for the Ridge regression.
+
+
+
+### Bagging
+
+#### Out-of-Bag Error Rate vs Number of Trees
+```{r}
+bag.charge = randomForest(charges ~., train, mtry = ncol(train)-1, ntree = 600, importance = TRUE, do.trace = 100)
+```
+The argument mtry = ncol(train) - 1 indicates that all 5 predictors should be considered for each split of the tree. I set the model to generate 600 trees and trace the out-of-bag error for every 100 trees.
+```{r}
+plot(bag.charge)
+```
+
+The graph above shows the relationship between out-of-bag error with number of trees with up to 600 trees. The error decreases the most in the first 70 trees, then it decreases very gradually.
+
+
+#### Predicted Y vs Acutal Y
+```{r}
+bag_pred = predict(bag.charge, newdata = test)
+ggplot() +
+  geom_point(aes(x=test$charges,y=bag_pred))+
+  labs(title = "Predicted vs Actual")+
+  geom_abline() +
+  labs(x = "Actual Charge Amount", y = "Predicted Bagging Charge Amount")
+```
+
+The Actual vs Predicted model generally follows a linear trend. The Bagging model does underestimate some of the actual charge amounts, as seen by the points that are to the right of abline.
+
+
+#### Comparing MSE to Previous Models
+```{r}
+bag_mse = mean((bag_pred - test$charges)^2)
+bag_mse
+```
+The bagging model performs significantly better than the Lasso and Ridge regresssions. The MSE for the bagging model is less than half the value of the Ridge model.
+
+
+#### Importance Matrix
+```{r}
+importance(bag.charge)
+```
+In the importance matrix, there are three large %IncMSE values compared to the rest. This means that these three variables (age, bmi, and smoker) are important in predicting the charge than the other variables.
+
+
+
+### Random Forest Regression
+
+#### Out-Of-Bag Error Rate vs. Number of Predictors
+```{r}
+# Set mtry using hyperparamter tuning
+oob.err = double(5)
+test.err = double(5)
+
+#mtry is no of Variables randomly chosen at each split
+for(mtry in 1:5)
+{
+  rf=randomForest(charges ~ . , data = train, mtry=mtry, ntree=400) 
+  oob.err[mtry] = rf$mse[400] #Error of all Trees fitted on training
+  
+  pred<-predict(rf,test) #Predictions on Test Set for each Tree
+  test.err[mtry]= mean( (pred - test$charges)^2) # "Test" Mean Squared Error
+  
+}
+```
+
+```{r}
+matplot(1:mtry , oob.err, pch=20 , col="blue",type="b",ylab="Mean Squared Error",xlab="Number of Predictors Considered at each Split")
+legend("topright",legend=c("Out of Bag Error"),pch=19, col=c("blue"))
+
+```
+
+The MSE dramatically drops after 2 predictors. The Minimum MSE is achieved with 3 predictors. 
+
+
+#### Tuning Predictors at Each Split
+```{r}
+registerDoMC(4)
+rf.charge <- foreach(ntree=rep(40, 10), .combine=randomForest::combine,
+.multicombine=TRUE, .packages='randomForest') %dopar% {
+randomForest(charges ~., train, mtry = 5,
+ntree = ntree, importance = TRUE)}
+```
+
+
+#### Predicted vs. Actual Charge
+```{r}
+rf_pred = predict(rf.charge, newdata = test)
+ggplot() +
+  geom_point(aes(x=test$charges, y = rf_pred))+
+  labs(title = "Predicted vs Actual Value")+
+  geom_abline() +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x = "Actual Charge", y = "Random Forest Estimate of Charge")
+  
+```
+
+The graph above shows that Random Forest Estimate of Charges does a good job in predicting the actual value of charge for smaller numbers. It is less accurate for charges ranging from $20,000-$30,000. 
+
+
+#### Comparing RF MSE to Other Model MSEs
+```{r}
+rf_mse = mean((rf_pred - test$charges)^2)
+rf_mse
+```
+The MSE of random forest of is much lower than the one for bagging. The RF MSE performs significantly better than all the other models when looking at MSE values.
+
+
+#### Importance Matrix
+```{r}
+importance(rf.charge)
+```
+The matrix above shows that the predictors of age, bmi, and smoker are important in predicting the charge of medical costs.
+
+
+#### Test and Out-of-Bag Error vs mtry
+```{r}
+matplot(1:mtry, cbind(oob.err,test.err), pch = 20,  col=c("red","blue"),type="b",ylab="Mean Squared Error",xlab="Number of Predictors Considered at each Split")
+legend("topright",legend=c("Out of Bag Error","Test Error"),pch=19, col=c("red","blue"))
+```
+
+The OOB Eror and Test Error have identical distributions, with the OOB error having slightly higher MSE for each level of predictors
+
+
+
+### Boosting
+
+#### Predicted vs Actual Charge
+```{r}
+# first need to convert columns to from character type to factors in order to use gbm function
+train1 = train
+train1$sex = as.factor(train1$sex)
+train1$smoker = as.factor(train1$smoker)
+train1$region = as.factor(train1$region)
+
+test1 = test
+test1$sex = as.factor(test1$sex)
+test1$smoker = as.factor(test1$smoker)
+test1$region = as.factor(test1$region)
+
+boost.charge = gbm(charges~.,
+                  data = train1,
+                  distribution = "gaussian",
+                  n.trees = 5000, interaction.depth = 4,
+                  )
+boost_pred = predict(boost.charge, test1, n.trees = 5000)
+ggplot() +
+geom_point(aes(x = test$charges, y = boost_pred)) +
+labs(title = "Prediction and Actual Value") +
+theme_bw() +
+theme(plot.title = element_text(hjust = 0.5)) +
+geom_abline() +
+labs(x="True Charge Amount", y="Boosting Estimation of Amount Charged")
+```
+
+The graph above shows that the boosting model does a good job in predicting the true charge for charges under $20,000. For charges larger than this vale, there is less accuracy.This model performs better than the Random Forest model since the data points are much closer to the trend line and there is less error.
+
+
+#### Comparing MSE of Boost Model to Other Models
+```{r}
+boost_mse = mean((boost_pred - test1$charges)^2)
+boost_mse
+```
+The MSE of the Boost Model performs worse than the Random Forest model, but better than thre tree, lasso, OLS, and ridge models. The Random Forest model stil has the lowest MSE yet.
+
+
+#### Importance Matrix
+```{r}
+# importance(boost.charge)
+summary(boost.charge)
+```
+
+Looking at the Relative Influence Graph, the three most important variables in this model are smoker, bmi, and age. In the previous models, the smoker variable was by far the most important variable. It is interesting to note that in thhis model, the variable bmi as nearly the same relative infuence as smoker.
+
+
+
+### XGboost
+
+#### Predicted vs Actual Charge
+```{r}
+# the x_train, y_train, and x_test are already in proper matrix format
+dtrain = xgb.DMatrix(data = x_train, label = train$charges)
+xgb.charge = xgboost(data=dtrain,
+                     max_depth=2,
+                     eta = 0.1,
+                     nrounds=40, # max number of boosting iterations (trees)
+                     lambda=0,
+                     print_every_n = 10,
+                     objective="reg:linear") 
+
+xgb_pred = predict(xgb.charge, x_test)
+ggplot() +
+  geom_point(aes(x = test$charges, y = xgb_pred)) +
+  labs(title = "Predicted vs Actual") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_abline() +
+  labs(x="Actual Charge Amount", y="XGboost Estimated Charge Amount")  
+```
+
+The spread of the data points above resembles the graphs for Bagging and Random Forest Models. The predictions above seem less accurate for larger charge amounts and seem more accurate for charge values ranging from $0 to $20,000.
+
+
+#### MSE Compairison
+```{r}
+xgb_mse = mean((xgb_pred - test$charges)^2)
+xgb_mse
+```
+As I noticed from the Predicted vs Actual graph, the XGboost model does not perform as well as the others. The MSE value of XGboost model is higher than the MSE value for the Boost model which had an MSE.
+
+
+#### Importance Matrix
+```{r}
+xgb.importance(colnames(x_train), model = xgb.charge)
+```
+In the matrix above, the important metric to look at is Gain.The smoker variable has the highest Gain value because it is more for generating a prediction than the other variables.
+
+
+
+### Comparing All Models
+Creating a table that has the MSE performance of all the models:
+```{r}
+mse_table = rbind(ridge_mse, ols_mse, lasso_mse, tree_mse, bag_mse, rf_mse,xgb_mse, boost_mse)
+colnames(mse_table) = "MSE"
+mse_table
+```
+After trying many different models, from linear OLS models to Neural Nets, I found the best model to be the XGboost model. The two least accurate models were the Tree model and the Neural Net model. They both had MSE values of greater than 100,000,000. I believe my MSE value for the Neural Net model is not very accurate because although my calculations did produce a MSE value at the end, the graphs did not print out data points. The Ridge, Lasso, and OLS model had similar performances because their MSE values range from 70-80 million range. Finally, the four best models were Bagging, Random Forest, Boost, and XGboost. All of their MSE values were in the 20 million range. The XGboost model had the lowest Mean Squared Error with a value of 21,192,091.
+
+
+
+### Conclusion
+Creating models that can predict a person's medical cost is very valuable in the real world. This information would be particuraly desirable for the health industry and for insurance companies. Insurance companies invest a lot of time, energy, and money in predicting health care costs. Not all of the variables in the Medical Cost data set were important in predicting charges, and the exploratory data analysis at the start of this project gave me some idea of the relationship among the variables. The variables that did not seem significant were sex, children, and region, and this was later confirmed by the various models I created. The variables that repeatedly were significant were age, bmi, and smoker.
+
+I created 5 linear regression models that varied in their number of predictors. To select the best model, I analyzed their R-squared values and choose the highest one. 75% of the variation in charges could be explained by this linear regression model. The other models I later used were not linear regressions so R-squared could not be used to compare models. Instead, Mean Square Error (MSE) was used to evaluate the performance of the models. For the machine learning models, I created training and testing data sets. I used the shrinkage methods of Lasso and Ridge and compared them to the OLS model. The MSE for the shrinkage models was lower than the best linear regression model. A Tree model was also used and subsampled 100 times with boot-straps. The performance of the Tree model was surprisingly poor. Its MSE was even higher the the OLS MSE. 
+
+The training sets created earlier were used for all of the following models: Bagging, Random Forest, Boost, and XGboost. These four models all performed significantly better than the first four. As can be seen in the MSE table, ther MSE value was less than half of the first four. In this part of the project, I also created importance matrix which described which independent variables were more valuable in predicting the actual medical charge. The importance matrix for Bagging, Random Forest, and Boosting emphasized that variables age, bmi, and smoker were important in predicting medical charge. Furthermore, the Predicted Charge vs Actual Charge plots had similar pattterns. The models were good at predicting the charge amount was less than $20,0000 and usually underestimated the charge amount. After $20,000, the models were less accurate but did not underestimate the actual charge like before. Of these four models, XGboost performed the best and had the lowest MSE with a value of 21,119,2091.
+
+The last model I created was Neural Nets using training and testing data sets. I defined a sequential network layer by layer and produced two hidden layers each with 64 nodes. For my data, I had to train 4,481 parameters. I had trouble creating the graphs for this part. The RStudio live peformance was showing up on my screen but when I tried to plot, data points did not appear on the graph. However, I was still able to obtain a Mean Squared Error value of 114,304,367. This high MSE value relative to the other models and the XGboost model still performed best.
+
+The data obtained from this project can have powerful real-world implications. This type of information would be highly coveted by billion dollar industries such as insurance companies, since it would give them a better idea of what to expect from certain customers. They need to be able to predict healthcare costs in order to plan ahead. For example, these models show that whether a person smokes is very important in predicting their medical costs. Insurance companies could use these models to predict the the medical costs of their customers, and adjust their insurance rates and premiums accordingly. This project taught me how valuable personal information is and the importance of keeping it private because in the wrong hands, personal information could be sold off and misused. More importantly, I now understand how much we can learn from a data set. By manipulating data and forming models, we can predict very valuable information.
